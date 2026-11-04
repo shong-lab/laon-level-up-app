@@ -24,7 +24,7 @@ LAON 선도학교 영어 공개수업의 **Five-Level Challenge**를 웹앱으�
 - **반별**: 반별 순위, 반 × 단원 히트맵, 선택 반의 미션별 달성률과 지원 필요 학생
 - **단원별**: 단원별 KPI, 미션별 달성률, 반별 경쟁, 반 × 미션 히트맵, 상위 · 지원 필요 학생
 - CSV 다운로드 (학생 × 단원 × 11개 미션)
-- 8초 간격 실시간 동기화
+- 20초 간격 실시간 동기화
 
 ## 실행 방법
 
@@ -58,7 +58,8 @@ node local-server.js
 - 공개 데모 교사 코드: `DEMO-2026`
 - 학생 개인 코드는 교사 로그인 후 `입장 코드` 탭에서 확인할 수 있습니다.
 - Vercel에서는 `api/` 폴더가 서버리스 API로 동작하고 `public/` 폴더가 정적 사이트로 배포됩니다.
-- 서버리스 환경에서는 학생 보고가 기본적으로 임시 저장됩니다. 여러 기기·인스턴스에서 영구 공유하려면 Vercel KV(Upstash Redis)를 연결하고 `KV_REST_API_URL`, `KV_REST_API_TOKEN` 환경 변수를 설정하세요.
+- 공개 데모는 익명 공유 저장소(MantleDB)를 사용해 여러 기기와 서버리스 인스턴스에서 학생 보고가 공유됩니다.
+- 운영 환경에서는 Vercel KV(Upstash Redis)를 연결하고 `KV_REST_API_URL`, `KV_REST_API_TOKEN` 환경 변수를 설정하는 것을 권장합니다. 또는 `LAON_STORE_URL`로 별도 저장소를 지정할 수 있습니다.
 - 운영 환경에서는 `TEACHER_CODE`, `LAON_CODE_SECRET`, `LAON_TOKEN_SECRET` 환경 변수를 반드시 별도로 설정하세요.
 
 ## 데이터

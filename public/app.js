@@ -2367,7 +2367,7 @@ async function init() {
     if (state.view === 'auth') return;
     if (state.auth.role === 'teacher') await loadTeacherState();
     else if (state.auth.role === 'student') await loadStudentState();
-  }, 8000);
+  }, 20000);
 }
 
 document.addEventListener('DOMContentLoaded', init);
