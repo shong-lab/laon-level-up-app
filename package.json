@@ -1,0 +1,12 @@
+{
+  "name": "laon-level-up-app",
+  "version": "1.0.0",
+  "private": true,
+  "description": "LAON 영어 레벨업 챌린지 - 학생 자기보고 및 교사 종합 대시보드",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
