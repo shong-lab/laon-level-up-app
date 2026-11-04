@@ -43,6 +43,7 @@ let reports = (() => {
 let auth = (() => {
   const parsed = loadJson(AUTH_FILE, {});
   return {
+    version: Number(parsed.version) || 1,
     teacherCode: typeof parsed.teacherCode === 'string' ? parsed.teacherCode : '',
     studentCodes: parsed.studentCodes && typeof parsed.studentCodes === 'object' ? parsed.studentCodes : {},
     createdAt: parsed.createdAt || new Date().toISOString()
@@ -108,14 +109,6 @@ function randomTeacherCode() {
   return code;
 }
 
-function randomStudentCode(used) {
-  let code = '';
-  do {
-    code = String(crypto.randomInt(100000, 1000000));
-  } while (used.has(code));
-  return code;
-}
-
 function currentTeacherCode() {
   return TEACHER_CODE_ENV ? normalizeTeacherCode(TEACHER_CODE_ENV) : normalizeTeacherCode(auth.teacherCode);
 }
@@ -132,13 +125,18 @@ function initializeAuth() {
     auth.teacherCode = randomTeacherCode();
     changed = true;
   }
-  const used = new Set(Object.values(auth.studentCodes));
-  for (const student of seed.students) {
-    if (!auth.studentCodes[student.id]) {
-      const code = randomStudentCode(used);
-      used.add(code);
-      auth.studentCodes[student.id] = code;
-      changed = true;
+  if (auth.version < 2) {
+    for (const student of seed.students) {
+      auth.studentCodes[student.id] = '0000';
+    }
+    auth.version = 2;
+    changed = true;
+  } else {
+    for (const student of seed.students) {
+      if (!auth.studentCodes[student.id]) {
+        auth.studentCodes[student.id] = '0000';
+        changed = true;
+      }
     }
   }
   if (changed) saveAuthNow();
@@ -153,11 +151,12 @@ initializeAuth();
 const sessions = new Map();
 const loginAttempts = new Map();
 
-function createSession(role, studentId = null) {
+function createSession(role, studentId = null, mustChange = false) {
   const token = crypto.randomBytes(24).toString('hex');
   sessions.set(token, {
     role,
     studentId,
+    mustChange,
     createdAt: Date.now(),
     expiresAt: Date.now() + SESSION_TTL,
     lastSeen: Date.now()
@@ -299,7 +298,8 @@ function codesPayload() {
       className: seed.classes.find(cls => cls.id === student.classId)?.name || `${student.classId}반`,
       no: student.no,
       name: student.name,
-      code: auth.studentCodes[student.id] || ''
+      code: auth.studentCodes[student.id] || '0000',
+      mustChange: (auth.studentCodes[student.id] || '0000') === '0000'
     }))
   };
 }
@@ -358,10 +358,14 @@ function readBody(req) {
   });
 }
 
-function requireRole(req, res, role) {
+function requireRole(req, res, role, options = {}) {
   const session = sessionFromRequest(req);
   if (!session || session.role !== role) {
     sendJson(res, 401, { error: '로그인이 필요합니다.' });
+    return null;
+  }
+  if (role === 'student' && session.mustChange && !options.allowMustChange) {
+    sendJson(res, 403, { error: '먼저 개인 입장 코드를 변경해 주세요.', code: 'CODE_CHANGE_REQUIRED' });
     return null;
   }
   return session;
@@ -473,10 +477,12 @@ const server = http.createServer(async (req, res) => {
         return;
       }
       clearLoginAttempts(req);
-      const token = createSession('student', studentId);
+      const mustChange = auth.studentCodes[studentId] === '0000';
+      const token = createSession('student', studentId, mustChange);
       sendJson(res, 200, {
         token,
         role: 'student',
+        mustChangeCode: mustChange,
         student: { id: student.id, classId: student.classId, no: student.no, name: student.name }
       });
       return;
@@ -515,8 +521,26 @@ const server = http.createServer(async (req, res) => {
       const student = session.studentId ? seed.students.find(item => item.id === session.studentId) : null;
       sendJson(res, 200, {
         role: session.role,
+        mustChange: Boolean(session.mustChange),
         student: student ? { id: student.id, classId: student.classId, no: student.no, name: student.name } : null
       });
+      return;
+    }
+
+    if (pathname === '/api/student/code' && req.method === 'POST') {
+      const session = requireRole(req, res, 'student', { allowMustChange: true });
+      if (!session) return;
+      const body = await readBody(req);
+      const newCode = String(body.newCode || '').replace(/\D/g, '');
+      if (!/^\d{4}$/.test(newCode) || newCode === '0000') {
+        sendJson(res, 400, { error: '0000이 아닌 4자리 숫자를 입력해 주세요.' });
+        return;
+      }
+      auth.studentCodes[session.studentId] = newCode;
+      saveAuthNow();
+      sessions.delete(session.token);
+      const token = createSession('student', session.studentId, false);
+      sendJson(res, 200, { ok: true, token, code: newCode });
       return;
     }
 
@@ -569,18 +593,12 @@ const server = http.createServer(async (req, res) => {
         sendJson(res, 400, { error: 'Unknown student' });
         return;
       }
-      const used = new Set(
-        Object.entries(auth.studentCodes)
-          .filter(([id]) => id !== studentId)
-          .map(([, code]) => code)
-      );
-      const code = randomStudentCode(used);
-      auth.studentCodes[studentId] = code;
+      auth.studentCodes[studentId] = '0000';
       saveAuthNow();
       for (const [token, session] of sessions) {
         if (session.role === 'student' && session.studentId === studentId) sessions.delete(token);
       }
-      sendJson(res, 200, { ok: true, studentId, code });
+      sendJson(res, 200, { ok: true, studentId, code: '0000' });
       return;
     }
 
@@ -625,6 +643,7 @@ server.listen(PORT, '0.0.0.0', () => {
   }
   console.log('');
   console.log(`  Teacher entry code: ${formatTeacherCode(currentTeacherCode())}`);
+  console.log('  Initial student code: 0000 (change on first login)');
   console.log('  Student entry codes: teacher dashboard > 입장 코드');
   console.log('');
 });

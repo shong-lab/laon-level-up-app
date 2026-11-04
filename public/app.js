@@ -34,7 +34,7 @@ const state = {
   classFingerprint: '',
   refreshing: false,
   loadingState: false,
-  auth: { role: null, token: null, studentId: null },
+  auth: { role: null, token: null, studentId: null, mustChangeCode: false, studentName: '' },
   authStage: 'role',
   authClass: 1,
   authStudentId: null,
@@ -470,7 +470,7 @@ function clearAuth(message = '', shouldRender = true) {
   sessionStorage.removeItem(SS_TOKEN);
   sessionStorage.removeItem(SS_ROLE);
   sessionStorage.removeItem(SS_STUDENT);
-  state.auth = { role: null, token: null, studentId: null };
+  state.auth = { role: null, token: null, studentId: null, mustChangeCode: false, studentName: '' };
   state.seed = null;
   state.reports = {};
   state.codes = null;
@@ -536,7 +536,7 @@ function renderAuth() {
           <span class="live-badge"><span class="live-dot"></span>개인 코드 필요</span>
         </div>
         <h2>학생 로그인</h2>
-        <p class="auth-sub">반과 이름을 선택한 뒤, 선생님이 알려준 6자리 개인 코드를 입력하세요.</p>
+        <p class="auth-sub">반과 이름을 선택한 뒤, 개인 4자리 코드를 입력하세요.</p>
         <div class="auth-class-tabs-label"><span>반 선택</span><strong>전체 ${classes.length}개 반</strong></div>
         <div class="class-tabs auth-class-tabs">
           ${classes.map(item => `<button class="class-tab ${item.id === state.authClass ? 'active' : ''}" data-action="auth-class" data-class="${item.id}">${esc(item.name)}<span>${item.studentCount}명</span></button>`).join('')}
@@ -551,13 +551,31 @@ function renderAuth() {
           <div class="auth-code-box">
             <div class="auth-code-title"><span>${esc(selected.name)}</span><small>${esc(classes.find(item => item.id === selected.classId)?.name || '')} · ${selected.no}번</small></div>
             <div class="auth-code-row">
-              <input id="auth-code" class="auth-code-input" data-input="auth-code" inputmode="numeric" maxlength="6" autocomplete="one-time-code" placeholder="6자리 코드" value="${esc(state.authCode)}">
+              <input id="auth-code" class="auth-code-input" data-input="auth-code" inputmode="numeric" maxlength="4" autocomplete="one-time-code" placeholder="4자리 코드" value="${esc(state.authCode)}">
               <button class="btn btn-primary" data-action="auth-login-student" ${state.authBusy ? 'disabled' : ''}>${state.authBusy ? '확인 중' : '입장'}</button>
             </div>
-            <p class="auth-hint">코드를 분실했다면 선생님께 다시 요청하세요.</p>
+            <p class="auth-hint">처음 입장 코드는 <strong>0000</strong>입니다. 입장하면 새 코드를 설정합니다. 코드를 분실했다면 선생님께 다시 요청하세요.</p>
           </div>` : `<div class="auth-code-empty">이름을 선택하면 입장 코드 입력창이 열립니다.</div>`}
         ${errorMarkup}`;
     }
+  } else if (stage === 'change-code') {
+    const studentName = state.auth.studentName || '학생';
+    panel = `
+      <div class="auth-stage-head">
+        <span class="live-badge"><span class="live-dot"></span>최초 1회 설정</span>
+      </div>
+      <h2>새 입장 코드 설정</h2>
+      <p class="auth-sub">${esc(studentName)} 학생, 처음 로그인했습니다. 기억하기 쉬운 4자리 숫자를 정해 주세요.</p>
+      <div class="auth-code-box" style="margin-top:22px">
+        <label class="auth-label" for="new-code">새 입장 코드 (4자리)</label>
+        <input id="new-code" class="auth-code-input" style="width:100%" inputmode="numeric" maxlength="4" autocomplete="new-password" placeholder="0000 제외">
+        <label class="auth-label" for="new-code-confirm" style="margin-top:14px">한 번 더 입력</label>
+        <input id="new-code-confirm" class="auth-code-input" style="width:100%" inputmode="numeric" maxlength="4" autocomplete="new-password" placeholder="같은 코드 다시 입력">
+        <button class="btn btn-primary" style="width:100%;margin-top:14px" data-action="auth-change-code" ${state.authBusy ? 'disabled' : ''}>${state.authBusy ? '저장 중' : '저장하고 시작'}</button>
+        <p class="auth-hint">0000은 사용할 수 없습니다. 다음 로그인부터 새 코드를 사용합니다.</p>
+      </div>
+      ${errorMarkup}
+      <button class="auth-back" style="margin-top:16px" data-action="logout">다른 학생으로 로그인</button>`;
   } else if (stage === 'teacher') {
     panel = `
       <div class="auth-stage-head">
@@ -643,15 +661,15 @@ function renderAuth() {
 async function loginStudent() {
   if (state.authBusy) return;
   const input = document.getElementById('auth-code');
-  const code = (input ? input.value : state.authCode).replace(/\D/g, '').slice(0, 6);
+  const code = (input ? input.value : state.authCode).replace(/\D/g, '').slice(0, 4);
   state.authCode = code;
   if (!state.authStudentId) {
     state.authError = '이름을 먼저 선택해 주세요.';
     render();
     return;
   }
-  if (code.length !== 6) {
-    state.authError = '6자리 개인 입장 코드를 입력해 주세요.';
+  if (code.length !== 4) {
+    state.authError = '4자리 개인 입장 코드를 입력해 주세요.';
     render();
     focusAuthCode();
     return;
@@ -667,15 +685,28 @@ async function loginStudent() {
     });
     const payload = await response.json();
     if (!response.ok) throw new Error(payload.error || '입장에 실패했습니다.');
-    state.auth = { role: 'student', token: payload.token, studentId: payload.student.id };
+    state.auth = {
+      role: 'student',
+      token: payload.token,
+      studentId: payload.student.id,
+      mustChangeCode: Boolean(payload.mustChangeCode),
+      studentName: payload.student.name
+    };
     sessionStorage.setItem(SS_TOKEN, payload.token);
     sessionStorage.setItem(SS_ROLE, 'student');
     sessionStorage.setItem(SS_STUDENT, payload.student.id);
-    const loaded = await loadStudentState({ initial: true });
-    if (!loaded) throw new Error('학생 데이터를 불러오지 못했습니다.');
     state.authBusy = false;
     state.authCode = '';
     state.authError = '';
+    if (payload.mustChangeCode) {
+      state.view = 'auth';
+      state.authStage = 'change-code';
+      render();
+      window.scrollTo({ top: 0, behavior: 'auto' });
+      return;
+    }
+    const loaded = await loadStudentState({ initial: true });
+    if (!loaded) throw new Error('학생 데이터를 불러오지 못했습니다.');
     render();
     window.scrollTo({ top: 0, behavior: 'auto' });
   } catch (error) {
@@ -684,6 +715,61 @@ async function loginStudent() {
     state.authError = error.message || '입장에 실패했습니다.';
     render();
     focusAuthCode();
+  }
+}
+
+function focusNewCode() {
+  setTimeout(() => {
+    const input = document.getElementById('new-code');
+    if (input) input.focus();
+  }, 60);
+}
+
+async function changeStudentCode() {
+  if (state.authBusy) return;
+  const codeInput = document.getElementById('new-code');
+  const confirmInput = document.getElementById('new-code-confirm');
+  const newCode = (codeInput ? codeInput.value : '').replace(/\D/g, '').slice(0, 4);
+  const confirmCode = (confirmInput ? confirmInput.value : '').replace(/\D/g, '').slice(0, 4);
+  if (!/^\d{4}$/.test(newCode) || newCode === '0000') {
+    state.authError = '0000이 아닌 4자리 숫자를 입력해 주세요.';
+    render();
+    focusNewCode();
+    return;
+  }
+  if (newCode !== confirmCode) {
+    state.authError = '두 코드가 일치하지 않습니다. 다시 확인해 주세요.';
+    render();
+    focusNewCode();
+    return;
+  }
+  state.authBusy = true;
+  state.authError = '';
+  render();
+  try {
+    const response = await apiFetch('/api/student/code', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ newCode })
+    });
+    const payload = await response.json();
+    if (!response.ok) throw new Error(payload.error || '코드 저장에 실패했습니다.');
+    state.auth.token = payload.token;
+    state.auth.mustChangeCode = false;
+    sessionStorage.setItem(SS_TOKEN, payload.token);
+    const loaded = await loadStudentState({ initial: true });
+    if (!loaded) throw new Error('학생 데이터를 불러오지 못했습니다.');
+    state.authBusy = false;
+    state.authError = '';
+    render();
+    window.scrollTo({ top: 0, behavior: 'auto' });
+    showToast('새 입장 코드 설정 완료', '다음 로그인부터 새 4자리 코드를 사용하세요.', 'success');
+  } catch (error) {
+    state.authBusy = false;
+    if (error.message === 'UNAUTHORIZED') return;
+    state.authError = error.message || '코드 저장에 실패했습니다.';
+    render();
+    focusNewCode();
   }
 }
 
@@ -709,7 +795,7 @@ async function loginTeacher() {
     });
     const payload = await response.json();
     if (!response.ok) throw new Error(payload.error || '입장에 실패했습니다.');
-    state.auth = { role: 'teacher', token: payload.token, studentId: null };
+    state.auth = { role: 'teacher', token: payload.token, studentId: null, mustChangeCode: false, studentName: '' };
     sessionStorage.setItem(SS_TOKEN, payload.token);
     sessionStorage.setItem(SS_ROLE, 'teacher');
     sessionStorage.removeItem(SS_STUDENT);
@@ -1590,6 +1676,7 @@ function renderCodes() {
       .filter(student => student.classId === cls.id)
       .sort((a, b) => a.no - b.no)
   }));
+  const pendingCount = state.codes.students.filter(student => student.code === '0000').length;
 
   return `
     <section class="panel panel-pad" style="margin-bottom:20px">
@@ -1608,13 +1695,14 @@ function renderCodes() {
         <div>
           <span class="auth-label">교사 입장 코드</span>
           <strong>${esc(state.codes.teacherCode)}</strong>
-          <p>서버 실행 시 콘솔에도 표시됩니다. 외부에 공유하지 마세요.</p>
+          <p>교사 코드는 외부에 공유하지 마세요. 로컬 실행 시 서버 콘솔에도 표시됩니다.</p>
         </div>
         <button class="btn btn-ghost btn-sm" data-action="copy-teacher-code" data-code="${esc(state.codes.teacherCode)}">복사</button>
       </div>
 
       <div class="code-warning">
-        개인 코드는 학생 본인에게만 알려 주세요. 코드를 재발급하면 이전 코드는 즉시 사용할 수 없습니다.
+        최초 코드는 <strong>0000</strong>입니다. 학생이 처음 로그인하면 새 4자리 코드를 설정합니다.
+        현재 0000 사용 학생: <strong>${pendingCount}명</strong> · 초기화하면 다시 0000으로 돌아갑니다.
       </div>
 
       ${classes.map(cls => `
@@ -1627,10 +1715,13 @@ function renderCodes() {
             ${cls.students.map(student => `
               <div class="code-row">
                 <div class="code-student"><span>${student.no}</span><strong>${esc(student.name)}</strong></div>
-                <code class="code-value">${esc(student.code)}</code>
+                <div class="code-value-box">
+                  <code class="code-value">${esc(student.code)}</code>
+                  <span class="code-pending ${student.code === '0000' ? 'pending' : ''}">${student.code === '0000' ? '변경 필요' : '설정 완료'}</span>
+                </div>
                 <div class="code-actions">
                   <button class="row-link" data-action="copy-code" data-code="${esc(student.code)}">복사</button>
-                  <button class="row-link danger" data-action="regenerate-code" data-student="${esc(student.id)}" data-name="${esc(student.name)}">재발급</button>
+                  <button class="row-link danger" data-action="regenerate-code" data-student="${esc(student.id)}" data-name="${esc(student.name)}">초기화</button>
                 </div>
               </div>`).join('')}
           </div>
@@ -1750,6 +1841,16 @@ async function loadStudentState(options = {}) {
   state.loadingState = true;
   try {
     const response = await apiFetch('/api/student/state');
+    if (response.status === 403) {
+      const errorPayload = await response.json();
+      if (errorPayload.code === 'CODE_CHANGE_REQUIRED') {
+        state.auth.mustChangeCode = true;
+        state.view = 'auth';
+        state.authStage = 'change-code';
+        render();
+        return false;
+      }
+    }
     if (!response.ok) throw new Error('학생 데이터를 불러오지 못했습니다.');
     const payload = await response.json();
     const nextFingerprint = fingerprintOf(payload.reports || {});
@@ -1942,11 +2043,17 @@ async function copyText(text) {
 
 function exportCodesCsv() {
   if (!state.codes) return;
-  const rows = [['반', '번호', '이름', '개인 입장 코드']];
+  const rows = [['반', '번호', '이름', '개인 입장 코드', '상태']];
   const students = [...state.codes.students]
     .sort((a, b) => a.classId - b.classId || a.no - b.no);
   for (const student of students) {
-    rows.push([student.className, student.no, student.name, student.code]);
+    rows.push([
+      student.className,
+      student.no,
+      student.name,
+      student.code,
+      student.code === '0000' ? '변경 필요' : '설정 완료'
+    ]);
   }
   const escapeCell = value => {
     const text = String(value == null ? '' : value);
@@ -2161,6 +2268,11 @@ document.addEventListener('click', async event => {
     return;
   }
 
+  if (action === 'auth-change-code') {
+    await changeStudentCode();
+    return;
+  }
+
   if (action === 'auth-login-teacher') {
     await loginTeacher();
     return;
@@ -2269,7 +2381,7 @@ document.addEventListener('click', async event => {
     if (state.auth.role !== 'teacher') return;
     const studentId = actionEl.dataset.student;
     const name = actionEl.dataset.name || '학생';
-    if (!window.confirm(`${name} 학생의 입장 코드를 재발급할까요? 이전 코드는 즉시 사용할 수 없게 됩니다.`)) return;
+    if (!window.confirm(`${name} 학생의 입장 코드를 0000으로 초기화할까요? 학생은 다음 로그인 때 새 코드를 설정하게 됩니다.`)) return;
     try {
       const response = await apiFetch('/api/teacher/codes/regenerate', {
         method: 'POST',
@@ -2277,14 +2389,17 @@ document.addEventListener('click', async event => {
         body: JSON.stringify({ studentId })
       });
       const payload = await response.json();
-      if (!response.ok) throw new Error(payload.error || '코드 재발급에 실패했습니다.');
+      if (!response.ok) throw new Error(payload.error || '코드 초기화에 실패했습니다.');
       const target = state.codes && state.codes.students.find(student => student.id === studentId);
-      if (target) target.code = payload.code;
+      if (target) {
+        target.code = payload.code;
+        target.mustChange = payload.code === '0000';
+      }
       render(true);
-      showToast('코드 재발급 완료', `${name} 학생의 새 입장 코드를 확인해 주세요.`, 'success');
+      showToast('0000으로 초기화 완료', `${name} 학생은 다음 로그인 때 새 코드를 설정합니다.`, 'success');
     } catch (error) {
       if (error.message === 'UNAUTHORIZED') return;
-      showToast('코드 재발급 실패', '서버 연결을 확인해 주세요.', 'error');
+      showToast('코드 초기화 실패', '서버 연결을 확인해 주세요.', 'error');
     }
   }
 });
@@ -2326,6 +2441,9 @@ document.addEventListener('keydown', event => {
   } else if (event.key === 'Enter' && event.target.id === 'auth-teacher-code') {
     event.preventDefault();
     loginTeacher();
+  } else if (event.key === 'Enter' && (event.target.id === 'new-code' || event.target.id === 'new-code-confirm')) {
+    event.preventDefault();
+    changeStudentCode();
   }
 });
 
@@ -2341,20 +2459,47 @@ async function init() {
   const studentId = sessionStorage.getItem(SS_STUDENT);
 
   if (token && (role === 'teacher' || role === 'student')) {
-    state.auth = {
-      role,
-      token,
-      studentId: role === 'student' ? studentId : null
-    };
-    state.view = role === 'teacher' ? 'teacher' : 'studentHome';
-    const loaded = role === 'teacher'
-      ? await loadTeacherState({ initial: true })
-      : await loadStudentState({ initial: true });
-    if (loaded) {
-      render();
-    } else if (!state.auth.token) {
-      render();
-    } else {
+    try {
+      const response = await fetch('/api/me', {
+        headers: { Authorization: `Bearer ${token}` },
+        cache: 'no-store'
+      });
+      if (!response.ok) throw new Error('SESSION');
+      const me = await response.json();
+      if (me.role === 'student' && me.mustChange) {
+        state.auth = {
+          role: 'student',
+          token,
+          studentId: me.student.id,
+          mustChangeCode: true,
+          studentName: me.student.name
+        };
+        state.view = 'auth';
+        state.authStage = 'change-code';
+        state.authError = '';
+        await loadBootstrap();
+        render();
+      } else {
+        state.auth = {
+          role: me.role,
+          token,
+          studentId: me.role === 'student' ? me.student.id : null,
+          mustChangeCode: false,
+          studentName: me.role === 'student' ? me.student.name : ''
+        };
+        state.view = me.role === 'teacher' ? 'teacher' : 'studentHome';
+        const loaded = me.role === 'teacher'
+          ? await loadTeacherState({ initial: true })
+          : await loadStudentState({ initial: true });
+        if (loaded) {
+          render();
+        } else if (!state.auth.token) {
+          render();
+        } else {
+          clearAuth('세션을 확인할 수 없습니다. 다시 로그인해 주세요.');
+        }
+      }
+    } catch (error) {
       clearAuth('세션을 확인할 수 없습니다. 다시 로그인해 주세요.');
     }
   } else {
