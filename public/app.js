@@ -571,7 +571,7 @@ function renderAuth() {
           <input id="auth-teacher-code" class="auth-code-input" data-input="auth-code" maxlength="12" autocomplete="one-time-code" placeholder="예: ABCD-EFGH" value="${esc(state.authCode)}">
           <button class="btn btn-primary" data-action="auth-login-teacher" ${state.authBusy ? 'disabled' : ''}>${state.authBusy ? '확인 중' : '입장'}</button>
         </div>
-        <p class="auth-hint">교사 코드는 서버 실행 시 콘솔에 표시되며, <code>data/auth.json</code>에도 저장됩니다.</p>
+        <p class="auth-hint">교사 코드는 학교 관리자에게 문의하세요. 로컬 실행 시 서버 콘솔과 <code>data/auth.json</code>에서 확인할 수 있습니다.</p>
       </div>
       ${errorMarkup}`;
   } else {

@@ -52,6 +52,15 @@ node server.js
 - 코드를 잊어버린 학생은 교사가 `입장 코드` 탭에서 재발급할 수 있습니다. 이전 코드는 즉시 무효화됩니다.
 - `data/auth.json`은 개인정보 보호를 위해 `.gitignore`에 포함되어 있습니다. 저장소에는 올라가지 않습니다.
 
+## Vercel 배포
+
+- 공개 데모: https://laon-level-up-app-a5ad.vercel.app/
+- 공개 데모 교사 코드: `DEMO-2026`
+- 학생 개인 코드는 교사 로그인 후 `입장 코드` 탭에서 확인할 수 있습니다.
+- Vercel에서는 `api/` 폴더가 서버리스 API로 동작하고 `public/` 폴더가 정적 사이트로 배포됩니다.
+- 서버리스 환경에서는 학생 보고가 기본적으로 임시 저장됩니다. 여러 기기·인스턴스에서 영구 공유하려면 Vercel KV(Upstash Redis)를 연결하고 `KV_REST_API_URL`, `KV_REST_API_TOKEN` 환경 변수를 설정하세요.
+- 운영 환경에서는 `TEACHER_CODE`, `LAON_CODE_SECRET`, `LAON_TOKEN_SECRET` 환경 변수를 반드시 별도로 설정하세요.
+
 ## 데이터
 
 - `seed.json` (프로젝트 루트, 웹으로 직접 공개되지 않음)
