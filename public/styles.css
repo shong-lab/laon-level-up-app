@@ -3259,3 +3259,24 @@ ul {
   .auth-code-row { flex-direction: column; }
   .auth-code-row .btn { width: 100%; }
 }
+
+.auth-class-preview { margin-top: 24px; max-width: 460px; }
+.auth-class-preview-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 9px; color: rgba(255, 255, 255, 0.5); font-size: 10px; font-weight: 900; letter-spacing: 0.03em; }
+.auth-class-preview-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 7px; }
+.auth-class-pill { display: flex; align-items: center; justify-content: space-between; gap: 6px; padding: 9px 10px; border-radius: 11px; background: rgba(255, 255, 255, 0.08); border: 1px solid rgba(255, 255, 255, 0.12); backdrop-filter: blur(8px); }
+.auth-class-pill strong { color: #fff; font-size: 11px; font-weight: 900; }
+.auth-class-pill em { color: rgba(255, 255, 255, 0.5); font-size: 9px; font-style: normal; font-weight: 800; }
+.auth-class-tabs-label { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 18px; margin-bottom: 8px; color: var(--muted); font-size: 10px; font-weight: 900; }
+.auth-class-tabs-label strong { color: var(--ink-soft); font-size: 10px; }
+
+@media (max-width: 700px) {
+  .auth-visual { padding: 28px 22px; }
+  .auth-visual h1 { font-size: 36px; }
+  .auth-visual > p { margin-top: 12px; font-size: 12px; }
+  .auth-visual-stats { margin-top: 18px; padding-top: 14px; }
+  .auth-class-preview { margin-top: 18px; }
+  .auth-class-preview-grid { gap: 6px; }
+  .auth-class-pill { padding: 8px 9px; }
+  .auth-class-pill strong { font-size: 10px; }
+  .auth-class-pill em { font-size: 8.5px; }
+}

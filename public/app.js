@@ -537,6 +537,7 @@ function renderAuth() {
         </div>
         <h2>학생 로그인</h2>
         <p class="auth-sub">반과 이름을 선택한 뒤, 선생님이 알려준 6자리 개인 코드를 입력하세요.</p>
+        <div class="auth-class-tabs-label"><span>반 선택</span><strong>전체 ${classes.length}개 반</strong></div>
         <div class="class-tabs auth-class-tabs">
           ${classes.map(item => `<button class="class-tab ${item.id === state.authClass ? 'active' : ''}" data-action="auth-class" data-class="${item.id}">${esc(item.name)}<span>${item.studentCount}명</span></button>`).join('')}
         </div>
@@ -614,15 +615,19 @@ function renderAuth() {
               <div><strong>${meta ? meta.classCount : '—'}</strong><span>학급</span></div>
               <div><strong>5</strong><span>레벨 티어</span></div>
             </div>
-            <div class="tier-preview auth-tier-preview">
-              ${state.bootstrap ? state.bootstrap.classes.slice(0, 3).map((item, index) => `
-                <div class="tier-preview-item">
-                  <div class="tier-medal" style="background:${['#4f6ef7', '#149d95', '#c79a16'][index]}">${index + 1}</div>
-                  <div><strong>${esc(item.name)}</strong><span>${item.studentCount}명 · 레벨업 레이스 참여</span></div>
-                </div>`).join('') : `
-                <div class="tier-preview-item"><div class="tier-medal" style="background:#4f6ef7">1</div><div><strong>BRONZE</strong><span>기초 어휘</span></div></div>
-                <div class="tier-preview-item"><div class="tier-medal" style="background:#149d95">3</div><div><strong>GOLD</strong><span>역할극</span></div></div>
-                <div class="tier-preview-item"><div class="tier-medal" style="background:#c79a16">5</div><div><strong>DIAMOND</strong><span>자율 창작 프로젝트</span></div></div>`}
+            <div class="auth-class-preview">
+              <div class="auth-class-preview-head">
+                <span>전체 ${meta ? meta.classCount : 6}개 반</span>
+                <span>${meta ? `${meta.studentCount}명 참여` : '참여 현황'}</span>
+              </div>
+              <div class="auth-class-preview-grid">
+                ${state.bootstrap
+                  ? state.bootstrap.classes.map(item => `
+                    <div class="auth-class-pill">
+                      <strong>${esc(item.name)}</strong><em>${item.studentCount}명</em>
+                    </div>`).join('')
+                  : `<div class="auth-class-pill"><strong>학급 정보</strong><em>불러오는 중</em></div>`}
+              </div>
             </div>
           </div>
           <div class="auth-card">${panel}</div>
