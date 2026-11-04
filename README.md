@@ -32,7 +32,7 @@ Node.js 18 이상이 필요합니다. 별도 패키지 설치(npm install)는 �
 
 ```powershell
 cd C:\Users\USER\Downloads\LAON_LevelUp_App
-node server.js
+node local-server.js
 ```
 
 또는 `start.bat`을 더블클릭하면 서버 실행과 브라우저 접속이 한 번에 이루어집니다. 바탕화면의 `LAON 레벨업 앱` 바로가기도 같은 역할을 합니다. 서버 콘솔 창을 닫으면 서버가 종료됩니다.
@@ -97,7 +97,9 @@ DIAMOND는 WT, PT, V, SP, TM 중 1개 이상을 완성하면 도달합니다. PL
 
 ```text
 LAON_LevelUp_App/
-├─ server.js              # Node.js 내장 모듈 기반 정적 파일 + 인증 API 서버
+├─ local-server.js        # 로컬 실행용 Node.js 서버 (파일 저장 기반)
+├─ api/                   # Vercel 서버리스 API 함수
+├─ lib/laon.js            # Vercel API 공통 로직
 ├─ seed.json              # 공개용 익명 데이터 (웹 비공개, API 전용)
 ├─ package.json
 ├─ public/

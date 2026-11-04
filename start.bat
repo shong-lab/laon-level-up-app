@@ -20,7 +20,7 @@ if /I "%~1"=="nobrowser" goto runserver
 start "" powershell -NoProfile -WindowStyle Hidden -Command "Start-Sleep -Seconds 2; Start-Process 'http://localhost:3000'"
 
 :runserver
-node server.js
+node local-server.js
 
 echo.
 echo Server stopped.
