@@ -19,6 +19,7 @@ LAON 선도학교 영어 공개수업의 **Five-Level Challenge**를 웹앱으�
 ### 교사 모드
 - 시작 화면에서 **교사** 선택 후 교사 입장 코드로 로그인
 - **입장 코드**: 학생별 개인 코드 확인 · 복사 · CSV 다운로드 · 재발급
+- **학생 관리**: 학생 이름 수정, 전입 학생 계정 추가, 전출 학생 계정 삭제 (추가 시 초기 코드 `0000`)
 - **종합**: 전체 KPI, 반별 레벨업 경쟁, 학생 레벨 분포, 단원별 추이, 성장 리더보드, 최근 학생 보고
 - **개별**: 학생별 최고 레벨, 4단계 성취, 전체 진도, L7–L12 단원별 도달, 상세 미션 매트릭스
 - **반별**: 반별 순위, 반 × 단원 히트맵, 선택 반의 미션별 달성률과 지원 필요 학생
@@ -77,6 +78,9 @@ node local-server.js
 - `data/reports.json`
   - 학생이 앱에서 보고한 기록이 저장되는 런타임 파일
   - `.gitignore`에 포함되어 저장소에는 올라가지 않습니다.
+- `data/roster.json`
+  - 교사가 수정한 학생 이름, 추가·삭제한 학생 계정이 저장되는 런타임 파일
+  - `.gitignore`에 포함되어 저장소에는 올라가지 않습니다.
 
 ### 미션 코드
 
@@ -109,7 +113,7 @@ LAON_LevelUp_App/
 │  ├─ index.html
 │  ├─ styles.css
 │  └─ app.js              # 학생/교사 화면, 집계, 차트, CSV
-└─ data/                  # reports.json, auth.json, seed-private.json (gitignore)
+└─ data/                  # reports.json, auth.json, roster.json, seed-private.json (gitignore)
 ```
 
 ## 참고

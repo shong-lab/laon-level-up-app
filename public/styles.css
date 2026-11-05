@@ -3284,3 +3284,27 @@ ul {
 .code-value-box { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; flex: 0 0 auto; }
 .code-pending { color: var(--teal); font-size: 8.5px; font-weight: 900; white-space: nowrap; }
 .code-pending.pending { color: #b94a4a; }
+
+/* Student roster management */
+.roster-add-bar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-top: 14px; }
+.roster-add-bar .field input { min-width: 120px; }
+.roster-add-bar .field input[type='number'] { min-width: 90px; }
+.roster-manage-list { display: flex; flex-direction: column; }
+.roster-manage-row { display: flex; align-items: center; gap: 8px; padding: 8px 0; border-bottom: 1px solid var(--line); }
+.roster-manage-row:last-child { border-bottom: 0; }
+.roster-manage-row .num { width: 28px; height: 28px; border-radius: 8px; display: grid; place-items: center; background: #f2f4f9; color: var(--muted); font-size: 9.5px; font-weight: 900; flex: 0 0 auto; }
+.roster-name-input { flex: 1; min-width: 0; padding: 8px 11px; border: 1px solid var(--line); border-radius: 9px; background: #fff; color: var(--ink); font-size: 12px; font-weight: 800; outline: 0; }
+.roster-name-input:focus { border-color: var(--primary); box-shadow: 0 0 0 3px rgba(79, 110, 247, 0.11); }
+.roster-tag { flex: 0 0 auto; padding: 3px 7px; border-radius: 999px; background: var(--primary-soft); color: var(--primary-dark); font-size: 8.5px; font-weight: 900; }
+.roster-manage-row .btn-sm { flex: 0 0 auto; }
+.roster-manage-row .row-link { flex: 0 0 auto; }
+
+@media (max-width: 700px) {
+  .roster-add-bar { align-items: stretch; }
+  .roster-add-bar .field { flex: 1 1 100%; }
+  .roster-manage-row { flex-wrap: wrap; }
+  .roster-name-input { flex: 1 1 100%; order: 2; }
+  .roster-manage-row .btn-sm { order: 3; }
+  .roster-manage-row .row-link { order: 4; }
+  .roster-tag { order: 1; }
+}

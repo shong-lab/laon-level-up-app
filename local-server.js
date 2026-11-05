@@ -9,6 +9,7 @@ const PUBLIC_DIR = path.join(ROOT, 'public');
 const DATA_DIR = path.join(ROOT, 'data');
 const REPORTS_FILE = path.join(DATA_DIR, 'reports.json');
 const AUTH_FILE = path.join(DATA_DIR, 'auth.json');
+const ROSTER_FILE = path.join(DATA_DIR, 'roster.json');
 const PRIVATE_SEED_FILE = path.join(DATA_DIR, 'seed-private.json');
 const SEED_FILE = fs.existsSync(PRIVATE_SEED_FILE) ? PRIVATE_SEED_FILE : path.join(ROOT, 'seed.json');
 const PORT = Number(process.env.PORT) || 3000;
@@ -17,7 +18,6 @@ const SESSION_TTL = 12 * 60 * 60 * 1000;
 const CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 
 const seed = JSON.parse(fs.readFileSync(SEED_FILE, 'utf8'));
-const studentIds = new Set(seed.students.map(s => s.id));
 const lessonIds = new Set(seed.lessons.map(l => l.id));
 const missionCodes = new Set(seed.missions.map(m => m.code));
 
@@ -33,6 +33,96 @@ function loadJson(file, fallback) {
   } catch (err) {
     return fallback;
   }
+}
+
+function normalizeRoster(input) {
+  const roster = input && typeof input === 'object' ? input : {};
+  return {
+    version: Number(roster.version) || 1,
+    names: roster.names && typeof roster.names === 'object' ? roster.names : {},
+    added: Array.isArray(roster.added) ? roster.added : [],
+    removed: Array.isArray(roster.removed) ? roster.removed : [],
+    updatedAt: roster.updatedAt || null
+  };
+}
+
+let roster = normalizeRoster(loadJson(ROSTER_FILE, null));
+
+function saveRosterNow() {
+  const tmp = `${ROSTER_FILE}.tmp`;
+  fs.writeFileSync(tmp, JSON.stringify(roster, null, 2), 'utf8');
+  fs.renameSync(tmp, ROSTER_FILE);
+}
+
+function rosterStudents() {
+  const removed = new Set(roster.removed);
+  const students = seed.students
+    .filter(student => !removed.has(student.id))
+    .map(student => {
+      const override = roster.names[student.id];
+      return {
+        id: student.id,
+        classId: student.classId,
+        no: student.no,
+        name: typeof override === 'string' && override.trim() ? override : student.name,
+        added: false
+      };
+    });
+  for (const student of roster.added) {
+    if (!student || !student.id || removed.has(student.id)) continue;
+    const classId = Number(student.classId);
+    if (!seed.classes.some(cls => cls.id === classId)) continue;
+    students.push({
+      id: String(student.id),
+      classId,
+      no: Number(student.no) || 0,
+      name: String(student.name || ''),
+      added: true
+    });
+  }
+  return students.sort((a, b) => a.classId - b.classId || a.no - b.no || a.name.localeCompare(b.name, 'ko'));
+}
+
+function classesWithCounts() {
+  const students = rosterStudents();
+  return seed.classes.map(cls => ({
+    ...cls,
+    studentCount: students.filter(student => student.classId === cls.id).length
+  }));
+}
+
+function rosterSeed() {
+  const students = rosterStudents();
+  return {
+    ...seed,
+    meta: { ...seed.meta, studentCount: students.length, classCount: seed.classes.length },
+    classes: classesWithCounts(),
+    students
+  };
+}
+
+function activeStudent(studentId) {
+  return rosterStudents().find(student => student.id === studentId) || null;
+}
+
+function cleanStudentName(value) {
+  return String(value || '').replace(/\s+/g, ' ').trim().slice(0, 30);
+}
+
+function nextStudentNumber(classId) {
+  const used = new Set(rosterStudents().filter(student => student.classId === classId).map(student => student.no));
+  let no = 1;
+  while (used.has(no)) no += 1;
+  return no;
+}
+
+function newStudentId() {
+  const used = new Set([...seed.students.map(student => student.id), ...rosterStudents().map(student => student.id)]);
+  let id = '';
+  do {
+    id = `add-${Date.now().toString(36)}-${crypto.randomBytes(3).toString('hex')}`;
+  } while (used.has(id));
+  return id;
 }
 
 let reports = (() => {
@@ -125,18 +215,26 @@ function initializeAuth() {
     auth.teacherCode = randomTeacherCode();
     changed = true;
   }
+  const students = rosterStudents();
   if (auth.version < 2) {
-    for (const student of seed.students) {
+    for (const student of students) {
       auth.studentCodes[student.id] = '0000';
     }
     auth.version = 2;
     changed = true;
   } else {
-    for (const student of seed.students) {
+    for (const student of students) {
       if (!auth.studentCodes[student.id]) {
         auth.studentCodes[student.id] = '0000';
         changed = true;
       }
+    }
+  }
+  const activeIds = new Set(students.map(student => student.id));
+  for (const studentId of Object.keys(auth.studentCodes)) {
+    if (!activeIds.has(studentId)) {
+      delete auth.studentCodes[studentId];
+      changed = true;
     }
   }
   if (changed) saveAuthNow();
@@ -246,7 +344,7 @@ function reportsForStudent(studentId) {
 
 function classStandings() {
   return seed.classes.map(cls => {
-    const students = seed.students.filter(student => student.classId === cls.id);
+    const students = rosterStudents().filter(student => student.classId === cls.id);
     let total = 0;
     let possible = 0;
     let levelSum = 0;
@@ -276,13 +374,14 @@ function classStandings() {
 }
 
 function studentSeed(studentId) {
+  const base = rosterSeed();
   return {
-    meta: seed.meta,
-    tiers: seed.tiers,
-    missions: seed.missions,
-    lessons: seed.lessons,
-    classes: seed.classes,
-    students: seed.students.filter(student => student.id === studentId),
+    meta: base.meta,
+    tiers: base.tiers,
+    missions: base.missions,
+    lessons: base.lessons,
+    classes: base.classes,
+    students: base.students.filter(student => student.id === studentId),
     baseline: { [studentId]: seed.baseline[studentId] || {} },
     studentId
   };
@@ -292,12 +391,13 @@ function codesPayload() {
   return {
     teacherCode: formatTeacherCode(currentTeacherCode()),
     generatedAt: auth.createdAt,
-    students: seed.students.map(student => ({
+    students: rosterStudents().map(student => ({
       id: student.id,
       classId: student.classId,
       className: seed.classes.find(cls => cls.id === student.classId)?.name || `${student.classId}반`,
       no: student.no,
       name: student.name,
+      added: Boolean(student.added),
       code: auth.studentCodes[student.id] || '0000',
       mustChange: (auth.studentCodes[student.id] || '0000') === '0000'
     }))
@@ -384,7 +484,7 @@ function sanitizeMissions(input) {
 function saveStudentReport(session, input) {
   const lessonId = String(input.lessonId || '');
   if (!lessonIds.has(lessonId)) throw new Error('Unknown lesson');
-  const student = seed.students.find(item => item.id === session.studentId);
+  const student = activeStudent(session.studentId);
   if (!student) throw new Error('Unknown student');
   const missions = sanitizeMissions(input.missions);
   const note = typeof input.note === 'string' ? input.note.slice(0, 200) : '';
@@ -443,21 +543,23 @@ const server = http.createServer(async (req, res) => {
 
   try {
     if (pathname === '/api/auth/bootstrap' && req.method === 'GET') {
+      const base = rosterSeed();
       sendJson(res, 200, {
         meta: {
-          title: seed.meta.title,
-          subtitle: seed.meta.subtitle,
-          school: seed.meta.school,
-          studentCount: seed.meta.studentCount,
-          classCount: seed.meta.classCount,
-          lessonCount: seed.meta.lessonCount
+          title: base.meta.title,
+          subtitle: base.meta.subtitle,
+          school: base.meta.school,
+          studentCount: base.meta.studentCount,
+          classCount: base.meta.classCount,
+          lessonCount: base.meta.lessonCount
         },
-        classes: seed.classes,
-        students: seed.students.map(student => ({
+        classes: base.classes,
+        students: base.students.map(student => ({
           id: student.id,
           classId: student.classId,
           no: student.no,
-          name: student.name
+          name: student.name,
+          added: Boolean(student.added)
         }))
       });
       return;
@@ -471,13 +573,14 @@ const server = http.createServer(async (req, res) => {
       const body = await readBody(req);
       const studentId = String(body.studentId || '');
       const code = String(body.code || '').replace(/\D/g, '');
-      const student = seed.students.find(item => item.id === studentId);
-      if (!studentIds.has(studentId) || !student || auth.studentCodes[studentId] !== code) {
+      const student = activeStudent(studentId);
+      const currentCode = auth.studentCodes[studentId] || '0000';
+      if (!student || currentCode !== code) {
         sendJson(res, 401, { error: '입장 코드가 올바르지 않습니다.' });
         return;
       }
       clearLoginAttempts(req);
-      const mustChange = auth.studentCodes[studentId] === '0000';
+      const mustChange = currentCode === '0000';
       const token = createSession('student', studentId, mustChange);
       sendJson(res, 200, {
         token,
@@ -518,7 +621,12 @@ const server = http.createServer(async (req, res) => {
         sendJson(res, 401, { error: '로그인이 필요합니다.' });
         return;
       }
-      const student = session.studentId ? seed.students.find(item => item.id === session.studentId) : null;
+      const student = session.studentId ? activeStudent(session.studentId) : null;
+      if (session.role === 'student' && !student) {
+        sessions.delete(session.token);
+        sendJson(res, 401, { error: '학생 계정을 찾을 수 없습니다.' });
+        return;
+      }
       sendJson(res, 200, {
         role: session.role,
         mustChange: Boolean(session.mustChange),
@@ -530,6 +638,10 @@ const server = http.createServer(async (req, res) => {
     if (pathname === '/api/student/code' && req.method === 'POST') {
       const session = requireRole(req, res, 'student', { allowMustChange: true });
       if (!session) return;
+      if (!activeStudent(session.studentId)) {
+        sendJson(res, 401, { error: '학생 계정을 찾을 수 없습니다.' });
+        return;
+      }
       const body = await readBody(req);
       const newCode = String(body.newCode || '').replace(/\D/g, '');
       if (!/^\d{4}$/.test(newCode) || newCode === '0000') {
@@ -547,6 +659,10 @@ const server = http.createServer(async (req, res) => {
     if (pathname === '/api/student/state' && req.method === 'GET') {
       const session = requireRole(req, res, 'student');
       if (!session) return;
+      if (!activeStudent(session.studentId)) {
+        sendJson(res, 401, { error: '학생 계정을 찾을 수 없습니다.' });
+        return;
+      }
       sendJson(res, 200, {
         seed: studentSeed(session.studentId),
         reports: reportsForStudent(session.studentId),
@@ -559,6 +675,10 @@ const server = http.createServer(async (req, res) => {
     if (pathname === '/api/student/report' && req.method === 'POST') {
       const session = requireRole(req, res, 'student');
       if (!session) return;
+      if (!activeStudent(session.studentId)) {
+        sendJson(res, 401, { error: '학생 계정을 찾을 수 없습니다.' });
+        return;
+      }
       const body = await readBody(req);
       const record = saveStudentReport(session, body);
       sendJson(res, 200, { ok: true, report: record });
@@ -569,12 +689,85 @@ const server = http.createServer(async (req, res) => {
       const session = requireRole(req, res, 'teacher');
       if (!session) return;
       sendJson(res, 200, {
-        seed,
+        seed: rosterSeed(),
         reports,
         codes: codesPayload(),
+        rosterUpdatedAt: roster.updatedAt,
         serverTime: new Date().toISOString()
       });
       return;
+    }
+
+    if (pathname === '/api/teacher/students' && req.method === 'POST') {
+      const session = requireRole(req, res, 'teacher');
+      if (!session) return;
+      const body = await readBody(req);
+      const action = String(body.action || '');
+
+      if (action === 'add') {
+        const classId = Number(body.classId);
+        if (!seed.classes.some(cls => cls.id === classId)) throw new Error('학급을 선택해 주세요.');
+        const name = cleanStudentName(body.name);
+        if (!name) throw new Error('학생 이름을 입력해 주세요.');
+        let no = Number(body.no);
+        if (!Number.isFinite(no) || no < 1) no = nextStudentNumber(classId);
+        no = Math.floor(no);
+        if (rosterStudents().some(student => student.classId === classId && student.no === no)) {
+          throw new Error('같은 반에 같은 번호의 학생이 이미 있습니다.');
+        }
+        const student = { id: newStudentId(), classId, no, name, addedAt: new Date().toISOString() };
+        roster.added.push(student);
+        roster.updatedAt = new Date().toISOString();
+        auth.studentCodes[student.id] = '0000';
+        saveRosterNow();
+        saveAuthNow();
+        sendJson(res, 200, { ok: true, action, student: { ...student, added: true }, students: rosterStudents(), classes: classesWithCounts(), rosterUpdatedAt: roster.updatedAt });
+        return;
+      }
+
+      if (action === 'rename') {
+        const studentId = String(body.studentId || '');
+        const student = activeStudent(studentId);
+        if (!student) throw new Error('학생을 찾을 수 없습니다.');
+        const name = cleanStudentName(body.name);
+        if (!name) throw new Error('학생 이름을 입력해 주세요.');
+        const added = roster.added.find(item => item.id === studentId);
+        if (added) added.name = name;
+        else roster.names[studentId] = name;
+        for (const report of Object.values(reports)) {
+          if (report.studentId === studentId) report.studentName = name;
+        }
+        roster.updatedAt = new Date().toISOString();
+        saveRosterNow();
+        persistReports();
+        sendJson(res, 200, { ok: true, action, student: { ...student, name }, students: rosterStudents(), classes: classesWithCounts(), rosterUpdatedAt: roster.updatedAt });
+        return;
+      }
+
+      if (action === 'delete') {
+        const studentId = String(body.studentId || '');
+        const student = activeStudent(studentId);
+        if (!student) throw new Error('학생을 찾을 수 없습니다.');
+        const addedIndex = roster.added.findIndex(item => item.id === studentId);
+        if (addedIndex >= 0) roster.added.splice(addedIndex, 1);
+        else if (!roster.removed.includes(studentId)) roster.removed.push(studentId);
+        delete roster.names[studentId];
+        delete auth.studentCodes[studentId];
+        for (const [key, report] of Object.entries(reports)) {
+          if (report.studentId === studentId) delete reports[key];
+        }
+        for (const [token, activeSession] of sessions) {
+          if (activeSession.role === 'student' && activeSession.studentId === studentId) sessions.delete(token);
+        }
+        roster.updatedAt = new Date().toISOString();
+        saveRosterNow();
+        saveAuthNow();
+        persistReports();
+        sendJson(res, 200, { ok: true, action, student, students: rosterStudents(), classes: classesWithCounts(), rosterUpdatedAt: roster.updatedAt });
+        return;
+      }
+
+      throw new Error('Unknown action');
     }
 
     if (pathname === '/api/teacher/codes' && req.method === 'GET') {
@@ -589,7 +782,7 @@ const server = http.createServer(async (req, res) => {
       if (!session) return;
       const body = await readBody(req);
       const studentId = String(body.studentId || '');
-      if (!studentIds.has(studentId)) {
+      if (!activeStudent(studentId)) {
         sendJson(res, 400, { error: 'Unknown student' });
         return;
       }

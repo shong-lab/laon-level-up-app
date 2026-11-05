@@ -43,7 +43,12 @@ const state = {
   authBusy: false,
   bootstrap: null,
   classStandings: null,
-  codes: null
+  codes: null,
+  rosterFingerprint: '',
+  rosterClass: 1,
+  rosterNo: '',
+  rosterName: '',
+  rosterBusy: false
 };
 
 let computeCache = null;
@@ -479,6 +484,8 @@ function clearAuth(message = '', shouldRender = true) {
   state.detailStudentId = null;
   state.reportFingerprint = '';
   state.classFingerprint = '';
+  state.rosterFingerprint = '';
+  state.rosterBusy = false;
   state.view = 'auth';
   state.authStage = 'role';
   state.authStudentId = null;
@@ -1207,7 +1214,7 @@ function renderStudentHome() {
 }
 
 function teacherTopbar() {
-  const tabs = [['overview', '종합'], ['individual', '개별'], ['classes', '반별'], ['units', '단원별'], ['codes', '입장 코드']];
+  const tabs = [['overview', '종합'], ['individual', '개별'], ['classes', '반별'], ['units', '단원별'], ['codes', '입장 코드'], ['roster', '학생 관리']];
   return `
     <div class="teacher-topbar">
       <div class="container-wide inner">
@@ -1729,12 +1736,73 @@ function renderCodes() {
     </section>`;
 }
 
+function renderRoster() {
+  const classes = state.seed.classes.map(cls => ({
+    ...cls,
+    students: studentsOfClass(cls.id).sort((a, b) => a.no - b.no || a.name.localeCompare(b.name, 'ko'))
+  }));
+  const selectedClass = Number(state.rosterClass) || (state.seed.classes[0] ? state.seed.classes[0].id : 1);
+  return `
+    <section class="panel panel-pad" style="margin-bottom:20px">
+      <div class="section-head">
+        <div>
+          <h2>학생 관리</h2>
+          <p>학생 이름을 수정하거나 전입·전출 학생 계정을 추가·삭제할 수 있습니다. 변경 내용은 학생 로그인 명단에 바로 반영됩니다.</p>
+        </div>
+        <span class="small muted">전체 ${state.seed.students.length}명</span>
+      </div>
+      <div class="roster-add-bar">
+        <div class="field">
+          <label for="roster-add-class">반</label>
+          <select id="roster-add-class" data-change="roster-class">
+            ${state.seed.classes.map(cls => `<option value="${cls.id}" ${selectedClass === cls.id ? 'selected' : ''}>${esc(cls.name)}</option>`).join('')}
+          </select>
+        </div>
+        <div class="field">
+          <label for="roster-add-no">번호</label>
+          <input id="roster-add-no" type="number" min="1" max="999" data-input="roster-no" value="${esc(state.rosterNo)}" placeholder="비우면 자동">
+        </div>
+        <div class="field">
+          <label for="roster-add-name">이름</label>
+          <input id="roster-add-name" data-input="roster-name" maxlength="20" value="${esc(state.rosterName)}" placeholder="전입 학생 이름" autocomplete="off">
+        </div>
+        <button class="btn btn-primary btn-sm" data-action="add-student" ${state.rosterBusy ? 'disabled' : ''}>${state.rosterBusy ? '추가 중' : '학생 추가'}</button>
+      </div>
+      <p class="auth-hint">추가한 학생의 초기 입장 코드는 <strong>0000</strong>입니다. 학생이 처음 로그인할 때 새 4자리 코드를 설정합니다. 번호를 비우면 해당 반의 다음 번호가 자동으로 지정됩니다.</p>
+    </section>
+    <section class="panel panel-pad">
+      <div class="section-head">
+        <div><h2>학생 명단</h2><p>이름을 바꾼 뒤 저장을 누르면 전체 보고서와 입장 코드 명단에 함께 반영됩니다.</p></div>
+        <span class="small muted">전입 학생은 이름 옆에 표시됩니다.</span>
+      </div>
+      ${classes.map(cls => `
+        <div class="code-section">
+          <div class="code-section-head">
+            <h3>${esc(cls.name)}</h3>
+            <span>${cls.students.length}명</span>
+          </div>
+          ${cls.students.length ? `
+            <div class="roster-manage-list">
+              ${cls.students.map(student => `
+                <div class="roster-manage-row">
+                  <span class="num">${student.no}</span>
+                  <input id="roster-name-${esc(student.id)}" class="roster-name-input" data-input="roster-name-${esc(student.id)}" value="${esc(student.name)}" maxlength="20" autocomplete="off" aria-label="${esc(student.name)} 이름">
+                  ${student.added ? '<span class="roster-tag">전입</span>' : ''}
+                  <button class="btn btn-soft btn-sm" data-action="rename-student" data-student="${esc(student.id)}" ${state.rosterBusy ? 'disabled' : ''}>이름 저장</button>
+                  <button class="row-link danger" data-action="delete-student" data-student="${esc(student.id)}" data-name="${esc(student.name)}">삭제</button>
+                </div>`).join('')}
+            </div>` : `<div class="empty-state" style="padding:18px"><strong>학생이 없습니다</strong>전입 학생을 추가해 주세요.</div>`}
+        </div>`).join('')}
+    </section>`;
+}
+
 function renderTeacher() {
   let body = '';
   if (state.teacherTab === 'individual') body = renderIndividual();
   else if (state.teacherTab === 'classes') body = renderClasses();
   else if (state.teacherTab === 'units') body = renderUnits();
   else if (state.teacherTab === 'codes') body = renderCodes();
+  else if (state.teacherTab === 'roster') body = renderRoster();
   else body = renderOverview();
   return `<div class="page">${teacherTopbar()}<main class="container-wide dash-body">${body}</main></div>`;
 }
@@ -1900,7 +1968,7 @@ async function loadStudentState(options = {}) {
 }
 
 async function loadTeacherState(options = {}) {
-  const { initial = false } = options;
+  const { initial = false, force = false } = options;
   if (!state.auth.token || state.auth.role !== 'teacher') return false;
   state.loadingState = true;
   try {
@@ -1908,7 +1976,8 @@ async function loadTeacherState(options = {}) {
     if (!response.ok) throw new Error('교사 데이터를 불러오지 못했습니다.');
     const payload = await response.json();
     const nextFingerprint = fingerprintOf(payload.reports || {});
-    const changed = nextFingerprint !== state.reportFingerprint;
+    const nextRosterFingerprint = `${payload.rosterUpdatedAt || ''}#${payload.seed && payload.seed.students ? payload.seed.students.length : 0}`;
+    const changed = nextFingerprint !== state.reportFingerprint || nextRosterFingerprint !== state.rosterFingerprint;
 
     state.seed = payload.seed;
     state.reports = payload.reports || {};
@@ -1917,12 +1986,16 @@ async function loadTeacherState(options = {}) {
     state.lastSync = new Date();
     state.loadError = null;
     state.reportFingerprint = nextFingerprint;
+    state.rosterFingerprint = nextRosterFingerprint;
     state.classFingerprint = '';
     state.selectedStudentId = null;
     invalidate();
 
     if (initial) {
       state.view = 'teacher';
+    } else if (force) {
+      render(true);
+      renderModal();
     } else {
       setLastSyncLabel();
       const active = document.activeElement;
@@ -1940,6 +2013,107 @@ async function loadTeacherState(options = {}) {
     return false;
   } finally {
     state.loadingState = false;
+  }
+}
+
+async function saveRosterAction(body, successTitle, successMessage) {
+  if (state.rosterBusy || state.auth.role !== 'teacher') return null;
+  state.rosterBusy = true;
+  render(true);
+  try {
+    const response = await apiFetch('/api/teacher/students', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    });
+    const payload = await response.json();
+    if (!response.ok) throw new Error(payload.error || '학생 정보를 저장하지 못했습니다.');
+    state.bootstrap = null;
+    loadBootstrap(true);
+    await loadTeacherState({ force: true });
+    showToast(successTitle, successMessage, 'success');
+    return payload;
+  } catch (error) {
+    if (error.message === 'UNAUTHORIZED') return null;
+    showToast('저장 실패', error.message || '서버 연결을 확인해 주세요.', 'error');
+    return null;
+  } finally {
+    state.rosterBusy = false;
+    render(true);
+  }
+}
+
+async function addStudent() {
+  if (state.rosterBusy || state.auth.role !== 'teacher') return;
+  const classInput = document.getElementById('roster-add-class');
+  const noInput = document.getElementById('roster-add-no');
+  const nameInput = document.getElementById('roster-add-name');
+  const classId = Number(classInput ? classInput.value : state.rosterClass);
+  const rawNo = (noInput ? noInput.value : state.rosterNo).trim();
+  const name = (nameInput ? nameInput.value : state.rosterName).replace(/\s+/g, ' ').trim();
+  const cls = classById(classId);
+  if (!cls) {
+    showToast('학급을 선택해 주세요', '학생을 추가할 반을 먼저 선택하세요.', 'error');
+    return;
+  }
+  if (!name) {
+    showToast('이름을 입력해 주세요', '추가할 전입 학생의 이름을 입력하세요.', 'error');
+    if (nameInput) nameInput.focus();
+    return;
+  }
+  const no = rawNo ? Number(rawNo) : null;
+  if (rawNo && (!Number.isInteger(no) || no < 1)) {
+    showToast('번호를 확인해 주세요', '1 이상의 번호를 입력하거나 비워 두세요.', 'error');
+    if (noInput) noInput.focus();
+    return;
+  }
+  const payload = await saveRosterAction(
+    { action: 'add', classId, no, name },
+    '학생 추가 완료',
+    `${cls.name}에 ${name} 학생을 추가했습니다. 초기 입장 코드는 0000입니다.`
+  );
+  if (payload) {
+    state.rosterNo = '';
+    state.rosterName = '';
+    render(true);
+  }
+}
+
+async function renameStudent(studentId) {
+  if (state.rosterBusy || state.auth.role !== 'teacher') return;
+  const student = studentById(studentId);
+  if (!student) return;
+  const input = document.getElementById(`roster-name-${studentId}`);
+  const name = (input ? input.value : student.name).replace(/\s+/g, ' ').trim();
+  if (!name) {
+    showToast('이름을 입력해 주세요', '학생 이름을 입력한 뒤 저장하세요.', 'error');
+    if (input) input.focus();
+    return;
+  }
+  if (name === student.name) {
+    showToast('변경 없음', '입력한 이름이 현재 이름과 같습니다.');
+    return;
+  }
+  await saveRosterAction(
+    { action: 'rename', studentId, name },
+    '이름 변경 완료',
+    `${name} 학생의 이름을 저장했습니다.`
+  );
+}
+
+async function deleteStudent(studentId, name) {
+  if (state.rosterBusy || state.auth.role !== 'teacher') return;
+  const student = studentById(studentId);
+  const label = name || (student ? student.name : '학생');
+  if (!window.confirm(`${label} 학생 계정을 삭제할까요?\n\n삭제하면 이 학생의 입장 코드와 보고 기록도 함께 삭제되며 되돌릴 수 없습니다.`)) return;
+  const payload = await saveRosterAction(
+    { action: 'delete', studentId },
+    '학생 삭제 완료',
+    `${label} 학생 계정을 삭제했습니다.`
+  );
+  if (payload) {
+    state.detailStudentId = null;
+    renderModal();
   }
 }
 
@@ -2314,6 +2488,21 @@ document.addEventListener('click', async event => {
     return;
   }
 
+  if (action === 'add-student') {
+    await addStudent();
+    return;
+  }
+
+  if (action === 'rename-student') {
+    await renameStudent(actionEl.dataset.student);
+    return;
+  }
+
+  if (action === 'delete-student') {
+    await deleteStudent(actionEl.dataset.student, actionEl.dataset.name);
+    return;
+  }
+
   if (action === 'focus-class') {
     state.classFocus = Number(actionEl.dataset.class);
     render(true);
@@ -2413,6 +2602,8 @@ document.addEventListener('change', event => {
   } else if (target.dataset.change === 'teacher-sort') {
     state.teacherSort = target.value;
     updateIndividualTable();
+  } else if (target.dataset.change === 'roster-class') {
+    state.rosterClass = Number(target.value);
   }
 });
 
@@ -2426,6 +2617,10 @@ document.addEventListener('input', event => {
   if (target.dataset.input === 'teacher-search') {
     state.teacherSearch = target.value;
     updateIndividualTable();
+  } else if (target.dataset.input === 'roster-no') {
+    state.rosterNo = target.value;
+  } else if (target.dataset.input === 'roster-name') {
+    state.rosterName = target.value;
   }
 });
 
@@ -2444,6 +2639,14 @@ document.addEventListener('keydown', event => {
   } else if (event.key === 'Enter' && (event.target.id === 'new-code' || event.target.id === 'new-code-confirm')) {
     event.preventDefault();
     changeStudentCode();
+  } else if (event.key === 'Enter' && (event.target.id === 'roster-add-no' || event.target.id === 'roster-add-name')) {
+    event.preventDefault();
+    addStudent();
+  } else if (event.key === 'Enter' && event.target.classList && event.target.classList.contains('roster-name-input')) {
+    event.preventDefault();
+    const row = event.target.closest('.roster-manage-row');
+    const button = row && row.querySelector('[data-action="rename-student"]');
+    if (button) renameStudent(button.dataset.student);
   }
 });
 
@@ -2513,7 +2716,7 @@ async function init() {
   }
 
   setInterval(async () => {
-    if (!state.auth.token || state.loadingState || state.saving || state.authBusy) return;
+    if (!state.auth.token || state.loadingState || state.saving || state.authBusy || state.rosterBusy) return;
     if (state.view === 'auth') return;
     if (state.auth.role === 'teacher') await loadTeacherState();
     else if (state.auth.role === 'student') await loadStudentState();

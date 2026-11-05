@@ -1,6 +1,7 @@
 node_modules/
 data/reports.json
 data/auth.json
+data/roster.json
 data/seed-private.json
 data/*.tmp
 *.log
