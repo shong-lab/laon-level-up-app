@@ -626,7 +626,7 @@ function renderAuth() {
         <section class="auth-layout">
           <div class="auth-visual">
             <span class="eyebrow">Level Up Yourself</span>
-            <h1>누구로<br><span>시작할까요?</span></h1>
+            <h1>Mosan<br><span>English Class</span></h1>
             <p>자신의 실력에 맞는 레벨을 선택하고, 미션을 통과할 때마다 나의 성장을 기록하세요.</p>
             <div class="auth-visual-stats">
               <div><strong>${meta ? meta.studentCount : '—'}</strong><span>참여 학생</span></div>
