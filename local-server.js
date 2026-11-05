@@ -698,7 +698,7 @@ const server = http.createServer(async (req, res) => {
       return;
     }
 
-    if (pathname === '/api/teacher/students' && req.method === 'POST') {
+    if ((pathname === '/api/teacher/codes' || pathname === '/api/teacher/students') && req.method === 'POST') {
       const session = requireRole(req, res, 'teacher');
       if (!session) return;
       const body = await readBody(req);

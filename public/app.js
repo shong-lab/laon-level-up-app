@@ -2021,7 +2021,7 @@ async function saveRosterAction(body, successTitle, successMessage) {
   state.rosterBusy = true;
   render(true);
   try {
-    const response = await apiFetch('/api/teacher/students', {
+    const response = await apiFetch('/api/teacher/codes', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body)
